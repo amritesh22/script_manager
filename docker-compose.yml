@@ -1,0 +1,33 @@
+services:
+  script-manager:
+    build:
+      context: .
+      dockerfile: dockerfile
+    # Or, once you push an image:
+    # image: youruser/script-manager:latest
+    container_name: script-manager
+    restart: unless-stopped
+    ports:
+      - "5200:5200"
+    environment:
+      APP_USER: "<APP_USER>"
+      APP_PASS: "<APP_PASS>"
+      # Generate one, e.g.:  openssl rand -hex 32
+      SECRET_KEY: "<SECRET_KEY>"
+      SESSION_HOURS: "12"
+      SCRIPTS_DIR: "/scripts"
+      ALLOW_CREATE: "true"
+      ALLOW_DELETE: "true"
+      RUN_TIMEOUT: "300"
+      # Optional:
+      # TRUSTED_IPS: "192.168.1.10,192.168.1.11"
+    volumes:
+      # Change left side to wherever your scripts live on the host
+      - /DATA/scripts:/scripts
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

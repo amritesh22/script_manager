@@ -1,0 +1,358 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Script Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0; background: #0f1116; color: #e6e6e6;
+      display: grid; grid-template-columns: 260px 1fr; height: 100vh;
+    }
+    aside {
+      background: #12151c; border-right: 1px solid #232833;
+      padding: 1rem; overflow-y: auto;
+    }
+    aside h2 { font-size: .9rem; text-transform: uppercase; letter-spacing: .08em; color: #8b93a7; margin: 0 0 .6rem; }
+    .script-item {
+      padding: .5rem .6rem; border-radius: 6px; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: ui-monospace, monospace; font-size: .85rem;
+    }
+    .script-item:hover { background: #1c2130; }
+    .script-item.active { background: #223052; }
+    .script-item .del { color: #ff6b6b; opacity: .5; padding: 0 .3rem; }
+    .script-item .del:hover { opacity: 1; }
+    main { display: flex; flex-direction: column; overflow: hidden; }
+    header {
+      display: flex; gap: .5rem; align-items: center;
+      padding: .6rem .8rem; background: #12151c; border-bottom: 1px solid #232833;
+    }
+    header input[type=text] {
+      flex: 1; padding: .5rem .7rem; background: #0f1116;
+      border: 1px solid #2a2f3a; color: #e6e6e6; border-radius: 6px;
+      font-family: ui-monospace, monospace;
+    }
+    button {
+      padding: .5rem .9rem; border: 0; border-radius: 6px;
+      background: #2a2f3a; color: #e6e6e6; cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #353c4a; }
+    button.primary { background: #4f8cff; color: #fff; }
+    button.primary:hover { background: #3a7bff; }
+    .editor-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    textarea {
+      flex: 1; width: 100%; resize: none; border: 0; outline: none;
+      background: #0b0e13; color: #d6deeb;
+      font-family: ui-monospace, monospace; font-size: 13px;
+      padding: 1rem; line-height: 1.5;
+    }
+    .args-bar {
+      display: flex; gap: .5rem; padding: .5rem .8rem;
+      background: #12151c; border-top: 1px solid #232833;
+    }
+    .args-bar input {
+      flex: 1; padding: .5rem .7rem; background: #0f1116;
+      border: 1px solid #2a2f3a; color: #e6e6e6; border-radius: 6px;
+      font-family: ui-monospace, monospace;
+    }
+    .tabs { display: flex; gap: .4rem; padding: .5rem .8rem 0; background: #12151c; }
+    .tab { border-radius: 6px 6px 0 0; }
+    .tab.active { background: #223052; }
+    .panel { display: none; padding: .6rem .8rem; background: #12151c; border-top: 1px solid #232833; }
+    .panel.active { display: block; }
+    .env-row, .schedule-row { display: flex; gap: .4rem; align-items: center; margin-bottom: .4rem; }
+    .env-row input, .schedule-row input { min-width: 0; padding: .45rem .6rem; background: #0f1116; border: 1px solid #2a2f3a; color: #e6e6e6; border-radius: 5px; font-family: ui-monospace, monospace; }
+    .env-row .env-key { width: 12rem; }
+    .env-row .env-value { flex: 1; }
+    .schedule-row .cron { width: 9rem; }
+    .schedule-row .schedule-name { flex: 1; }
+    .panel-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+    .output {
+      height: 240px; overflow: auto; background: #05070a;
+      border-top: 1px solid #232833; padding: .8rem 1rem;
+      font-family: ui-monospace, monospace; font-size: 12.5px;
+      white-space: pre-wrap; color: #b9c3d6;
+    }
+    .output .stderr { color: #ff8a8a; }
+    .output .meta { color: #7a849b; font-size: .75rem; margin-bottom: .5rem; }
+    .row { display: flex; gap: .5rem; align-items: center; }
+    .spacer { flex: 1; }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="row" style="margin-bottom:.8rem">
+      <h2 style="margin:0">Scripts</h2>
+      <div class="spacer"></div>
+      <button id="newBtn" title="New script">+</button>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <main>
+    <header>
+      <input id="filename" type="text" placeholder="script-name.sh" />
+      <button id="saveBtn" class="primary">Save</button>
+      <button id="runBtn">Run ▶</button>
+      <button id="logoutBtn">Logout</button>
+    </header>
+
+    <div class="editor-wrap">
+      <textarea id="editor" spellcheck="false" placeholder="#!/bin/bash&#10;echo &quot;Hello $1&quot;"></textarea>
+      <div class="args-bar">
+        <input id="args" type="text" placeholder="Arguments (space-separated, supports quotes)" />
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="envPanel">Environment</button>
+        <button class="tab" data-tab="schedulePanel">Schedules</button>
+      </div>
+      <section id="envPanel" class="panel active">
+        <div id="envRows"></div>
+        <div class="panel-actions"><button id="addEnvBtn">+ Variable</button><button id="saveEnvBtn" class="primary">Save environment</button></div>
+      </section>
+      <section id="schedulePanel" class="panel">
+        <div id="scheduleRows"></div>
+        <div class="panel-actions"><button id="addScheduleBtn">+ Schedule</button><button id="saveScheduleBtn" class="primary">Save schedules</button></div>
+      </section>
+      <div id="output" class="output"><div class="meta">Output will appear here.</div></div>
+    </div>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let current = null;
+let dirty = false;
+let currentSchedules = [];
+
+function setDirty(v) { dirty = v; document.title = (v ? "● " : "") + "Script Manager"; }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    ...opts,
+  });
+  if (r.status === 401) { location.href = "/login"; throw new Error("unauth"); }
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || r.statusText);
+  }
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("application/json") ? r.json() : r.text();
+}
+
+async function loadList() {
+  const data = await api("/api/scripts");
+  const el = $("list");
+  el.innerHTML = "";
+  for (const s of data.scripts) {
+    const div = document.createElement("div");
+    div.className = "script-item" + (s.name === current ? " active" : "");
+    div.innerHTML = `<span>${s.name}</span>`;
+    const del = document.createElement("span");
+    del.className = "del";
+    del.textContent = "✕";
+    del.title = "Delete";
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete ${s.name}?`)) return;
+      await api("/api/scripts/" + encodeURIComponent(s.name), { method: "DELETE" });
+      if (current === s.name) { current = null; $("editor").value = ""; $("filename").value = ""; }
+      loadList();
+    };
+    div.appendChild(del);
+    div.onclick = () => openScript(s.name);
+    el.appendChild(div);
+  }
+}
+
+async function openScript(name) {
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  const data = await api("/api/scripts/" + encodeURIComponent(name));
+  current = name;
+  $("filename").value = name;
+  $("editor").value = data.content;
+  renderEnv(data.env || {});
+  currentSchedules = data.schedules || [];
+  renderSchedules();
+  setDirty(false);
+  loadList();
+}
+
+function renderEnv(env) {
+  const rows = $("envRows");
+  rows.innerHTML = "";
+  for (const [key, value] of Object.entries(env)) addEnvRow(key, value);
+}
+
+function addEnvRow(key = "", value = "") {
+  const row = document.createElement("div");
+  row.className = "env-row";
+  row.innerHTML = `<input class="env-key" placeholder="KEY" value="${escapeAttr(key)}"><input class="env-value" placeholder="value" value="${escapeAttr(value)}"><button title="Remove variable">✕</button>`;
+  row.querySelector("button").onclick = () => row.remove();
+  $("envRows").appendChild(row);
+}
+
+function escapeAttr(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function renderSchedules() {
+  const rows = $("scheduleRows");
+  rows.innerHTML = "";
+  for (const schedule of currentSchedules) addScheduleRow(schedule);
+}
+
+function addScheduleRow(schedule = { id: crypto.randomUUID(), name: current || "", cron: "0 * * * *", enabled: true }) {
+  const row = document.createElement("div");
+  row.className = "schedule-row";
+  row.dataset.id = schedule.id;
+  row.innerHTML = `<input class="schedule-name" placeholder="script-name.sh" value="${escapeAttr(schedule.name)}"><input class="cron" placeholder="* * * * *" value="${escapeAttr(schedule.cron)}"><label><input class="enabled" type="checkbox" ${schedule.enabled ? "checked" : ""}> enabled</label><button title="Remove schedule">✕</button>`;
+  row.querySelector("button").onclick = () => row.remove();
+  $("scheduleRows").appendChild(row);
+}
+
+function collectSchedules() {
+  return [...document.querySelectorAll(".schedule-row")].map((row) => ({
+    id: row.dataset.id,
+    name: row.querySelector(".schedule-name").value.trim(),
+    cron: row.querySelector(".cron").value.trim(),
+    enabled: row.querySelector(".enabled").checked,
+  }));
+}
+
+async function saveEnv() {
+  if (!current) { alert("Save the script first"); return; }
+  const env = {};
+  for (const row of document.querySelectorAll(".env-row")) {
+    const key = row.querySelector(".env-key").value.trim();
+    if (key) env[key] = row.querySelector(".env-value").value;
+  }
+  await api(`/api/scripts/${encodeURIComponent(current)}/env`, { method: "PUT", body: JSON.stringify({ env }) });
+}
+
+async function saveSchedules() {
+  const schedules = collectSchedules();
+  await api("/api/schedules", { method: "PUT", body: JSON.stringify({ schedules }) });
+  currentSchedules = schedules.filter((schedule) => schedule.name === current);
+}
+
+async function saveScript() {
+  const name = $("filename").value.trim();
+  if (!name) { alert("Enter a filename"); return; }
+  await api("/api/scripts/" + encodeURIComponent(name), {
+    method: "POST",
+    body: JSON.stringify({ content: $("editor").value }),
+  });
+  current = name;
+  setDirty(false);
+  loadList();
+}
+
+function parseArgs(str) {
+  const out = [];
+  let cur = "", q = null;
+  for (const ch of str) {
+    if (q) {
+      if (ch === q) q = null; else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      q = ch;
+    } else if (/\s/.test(ch)) {
+      if (cur) { out.push(cur); cur = ""; }
+    } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+async function runScript() {
+  const name = $("filename").value.trim();
+  if (!name) { alert("Save the script first"); return; }
+  const args = parseArgs($("args").value);
+  const out = $("output");
+  out.innerHTML = `<div class="meta">Running ${name}...</div>`;
+  try {
+    const response = await fetch(`/api/scripts/${encodeURIComponent(name)}/run`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ args }),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const events = buffer.split("\n\n");
+      buffer = events.pop();
+      for (const block of events) {
+        const event = block.match(/^event: (.+)$/m)?.[1];
+        const data = block.match(/^data: (.+)$/m)?.[1];
+        if (!data) continue;
+        const payload = JSON.parse(data);
+        if (event === "data") appendOutput(payload.stream, payload.data);
+        if (event === "close") appendOutput("meta", `\nexit code: ${payload.exit_code}`);
+        if (event === "error") appendOutput("stderr", payload.error);
+      }
+      if (done) break;
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="stderr">Error: ${e.message}</div>`;
+  }
+}
+
+function appendOutput(stream, text) {
+  const pre = document.createElement("div");
+  pre.className = stream === "stderr" ? "stderr" : stream === "meta" ? "meta" : "";
+  pre.textContent = text;
+  $("output").appendChild(pre);
+  $("output").scrollTop = $("output").scrollHeight;
+}
+
+$("editor").addEventListener("input", () => setDirty(true));
+$("filename").addEventListener("input", () => setDirty(true));
+$("saveBtn").onclick = saveScript;
+$("runBtn").onclick = runScript;
+$("addEnvBtn").onclick = () => addEnvRow();
+$("saveEnvBtn").onclick = saveEnv;
+$("addScheduleBtn").onclick = () => addScheduleRow();
+$("saveScheduleBtn").onclick = saveSchedules;
+document.querySelectorAll(".tab").forEach((tab) => tab.onclick = () => {
+  document.querySelectorAll(".tab, .panel").forEach((el) => el.classList.remove("active"));
+  tab.classList.add("active");
+  $(tab.dataset.tab).classList.add("active");
+});
+$("newBtn").onclick = () => {
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  current = null;
+  $("filename").value = "new-script.sh";
+  $("editor").value = "#!/bin/bash\nset -e\n\necho \"Hello from $0\"\n";
+  renderEnv({});
+  currentSchedules = [];
+  renderSchedules();
+  setDirty(true);
+  loadList();
+};
+$("logoutBtn").onclick = async () => {
+  await fetch("/logout", { method: "POST", credentials: "same-origin" });
+  location.href = "/login";
+};
+
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    saveScript();
+  }
+});
+
+loadList();
+</script>
+</body>
+</html>
