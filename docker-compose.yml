@@ -1,10 +1,6 @@
 services:
   script-manager:
-    build:
-      context: .
-      dockerfile: dockerfile
-    # Or, once you push an image:
-    # image: youruser/script-manager:latest
+    image: amritesh22/script_manager:latest
     container_name: script-manager
     restart: unless-stopped
     ports:
